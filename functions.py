@@ -5,12 +5,9 @@ import hashlib
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from functions_get import mostrar_historial
+from dotenv import load_dotenv
 
-from data import (
-    VOLUME_LABEL,
-    CARPETA_POR_ORGANIZAR
-)
+from functions_get import mostrar_historial
 
 from db import (
     foto_existe,
@@ -19,6 +16,9 @@ from db import (
     actualizar_archivo,
     buscar_foto_sincronizada_por_hash
 )
+
+load_dotenv()
+CARPETA_POR_ORGANIZAR = os.getenv("CARPETA_POR_ORGANIZAR")
 
 ####################################################################################
 def calcular_hash_sha256(ruta):

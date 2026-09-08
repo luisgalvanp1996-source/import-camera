@@ -1,13 +1,16 @@
 import tkinter as tk
 
+import os
+from dotenv import load_dotenv
+
 from functions import (
     obtener_unidades,
     obtener_etiqueta,
     mostrar_aviso
 )
 
-from data import VOLUME_LABEL
-
+load_dotenv()
+volume_label = os.getenv("VOLUME_LABEL")
 
 class Aplicacion:
     def __init__(self, root):
@@ -29,7 +32,7 @@ class Aplicacion:
 
             etiqueta = obtener_etiqueta(unidad)
 
-            if etiqueta and etiqueta.upper() == VOLUME_LABEL.upper():
+            if etiqueta and etiqueta.upper() == volume_label.upper():
 
                 print(f"SD detectada: {unidad}")
                 print(f"Etiqueta: {etiqueta}")
