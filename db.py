@@ -66,6 +66,46 @@ def buscar_foto_por_hash(hash_sha256):
     finally:
         conexion.close()
 
+def obtener_foto_por_hash(hash_sha256):
+    """
+    Obtiene la fotografía y su estado físico usando su SHA-256.
+    """
+
+    conexion = conectar()
+
+    try:
+        cursor = conexion.cursor()
+
+        cursor.execute(
+            """
+            SELECT
+                Fotos.FotoID,
+                Fotos.HashSHA256,
+                Fotos.NombreOriginal,
+                Fotos.Extension,
+                Fotos.Formato,
+                Fotos.FechaCaptura,
+                Fotos.FechaImportacion,
+                Archivos.NombreArchivo,
+                Archivos.RutaArchivo,
+                Archivos.TamanoBytes,
+                Archivos.Estado,
+                Archivos.MensajeError,
+                Archivos.FechaCreacion,
+                Archivos.FechaActualizacion
+            FROM Fotos
+            LEFT JOIN Archivos
+                ON Fotos.FotoID = Archivos.FotoID
+            WHERE Fotos.HashSHA256 = ?
+            LIMIT 1
+            """,
+            (hash_sha256,)
+        )
+
+        return cursor.fetchone()
+
+    finally:
+        conexion.close()
 
 def foto_existe(hash_sha256):
     """
