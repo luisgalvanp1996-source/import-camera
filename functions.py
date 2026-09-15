@@ -14,7 +14,8 @@ from db import (
     insertar_foto,
     insertar_archivo,
     actualizar_archivo,
-    buscar_foto_sincronizada_por_hash
+    buscar_foto_sincronizada_por_hash,
+    eliminar_foto
 )
 
 load_dotenv()
@@ -611,7 +612,6 @@ def seleccionar_fotos():
 
     return fotos_sincronizadas
 
-
 def sincronizar_archivos(archivos, ventana=None):
     """Sincroniza una lista de archivos multimedia."""
 
@@ -634,6 +634,8 @@ def sincronizar_archivos(archivos, ventana=None):
         foto_id = None
         ruta_destino = None
         ruta_temporal = None
+        registro_foto_creado = False
+        registro_archivo_creado = False
 
         try:
             # -----------------------------------------
@@ -683,20 +685,7 @@ def sincronizar_archivos(archivos, ventana=None):
             print(f"Tamaño: {tamano_bytes} bytes")
 
             # -----------------------------------------
-            # 5. Registrar en Fotos
-            # -----------------------------------------
-
-            insertar_foto(
-                foto_id=foto_id,
-                hash_sha256=hash_sha256,
-                nombre_original=nombre_original,
-                extension=extension,
-                formato=formato,
-                fecha_captura=None
-            )
-
-            # -----------------------------------------
-            # 6. Crear nombre físico
+            # 5. Crear nombre físico
             # -----------------------------------------
 
             nombre_destino = f"{foto_id}{extension}"
@@ -712,32 +701,25 @@ def sincronizar_archivos(archivos, ventana=None):
             print(f"Destino: {ruta_destino}")
 
             # -----------------------------------------
-            # 7. Comprobar que UUID no exista
+            # 6. Comprobar que el destino no exista
             # -----------------------------------------
 
             if os.path.exists(ruta_destino):
+
                 raise FileExistsError(
                     f"Ya existe un archivo con ese UUID:\n"
                     f"{ruta_destino}"
                 )
 
-            # -----------------------------------------
-            # 8. Registrar archivo como PENDIENTE
-            # -----------------------------------------
+            if os.path.exists(ruta_temporal):
 
-            insertar_archivo(
-                foto_id=foto_id,
-                nombre_archivo=nombre_destino,
-                ruta_archivo=ruta_destino,
-                tamano_bytes=tamano_bytes,
-                estado="PENDIENTE"
-            )
-
-            print("SQLite: REGISTRADA")
-            print("Estado: PENDIENTE")
+                raise FileExistsError(
+                    f"Ya existe un archivo temporal con ese UUID:\n"
+                    f"{ruta_temporal}"
+                )
 
             # -----------------------------------------
-            # 9. Copiar a archivo temporal
+            # 7. Copiar a archivo temporal
             # -----------------------------------------
 
             print("Copiando archivo...")
@@ -750,7 +732,7 @@ def sincronizar_archivos(archivos, ventana=None):
             print("Copia temporal terminada.")
 
             # -----------------------------------------
-            # 10. Verificar tamaño
+            # 8. Verificar tamaño
             # -----------------------------------------
 
             tamano_temporal = os.path.getsize(
@@ -758,6 +740,7 @@ def sincronizar_archivos(archivos, ventana=None):
             )
 
             if tamano_temporal != tamano_bytes:
+
                 raise IOError(
                     "El tamaño del archivo copiado no coincide."
                 )
@@ -765,16 +748,19 @@ def sincronizar_archivos(archivos, ventana=None):
             print("Verificación de tamaño: OK")
 
             # -----------------------------------------
-            # 11. Verificar SHA-256
+            # 9. Verificar SHA-256
             # -----------------------------------------
 
             hash_temporal = calcular_hash_sha256(
                 ruta_temporal
             )
 
-            print(f"SHA-256 temporal: {hash_temporal}")
+            print(
+                f"SHA-256 temporal: {hash_temporal}"
+            )
 
             if hash_temporal != hash_sha256:
+
                 raise IOError(
                     "El SHA-256 del archivo copiado no coincide."
                 )
@@ -782,7 +768,7 @@ def sincronizar_archivos(archivos, ventana=None):
             print("Verificación SHA-256: OK")
 
             # -----------------------------------------
-            # 12. Crear archivo definitivo
+            # 10. Crear archivo definitivo
             # -----------------------------------------
 
             os.replace(
@@ -795,19 +781,45 @@ def sincronizar_archivos(archivos, ventana=None):
             print("Archivo definitivo creado.")
 
             # -----------------------------------------
-            # 13. Marcar como SINCRONIZADO
+            # 11. Registrar en Fotos
             # -----------------------------------------
 
-            actualizar_archivo(
+            insertar_foto(
+                foto_id=foto_id,
+                hash_sha256=hash_sha256,
+                nombre_original=nombre_original,
+                extension=extension,
+                formato=formato,
+                fecha_captura=None
+            )
+
+            registro_foto_creado = True
+
+            print("SQLite: FOTO REGISTRADA")
+
+            # -----------------------------------------
+            # 12. Registrar en Archivos
+            # -----------------------------------------
+
+            insertar_archivo(
                 foto_id=foto_id,
                 nombre_archivo=nombre_destino,
                 ruta_archivo=ruta_destino,
+                tamano_bytes=tamano_bytes,
                 estado="SINCRONIZADO"
             )
 
+            registro_archivo_creado = True
+
+            print("SQLite: ARCHIVO REGISTRADO")
+            print("Estado: SINCRONIZADO")
+
+            # -----------------------------------------
+            # 13. Sincronización correcta
+            # -----------------------------------------
+
             fotos_sincronizadas.append(archivo)
 
-            print("Estado: SINCRONIZADO")
             print("Sincronización correcta.")
 
         except Exception as error:
@@ -818,31 +830,68 @@ def sincronizar_archivos(archivos, ventana=None):
             print(error)
 
             # -----------------------------------------
-            # Marcar como ERROR en SQLite
+            # 14. Limpiar SQLite si alcanzó a registrar
             # -----------------------------------------
 
-            if foto_id is not None:
+            if registro_foto_creado:
 
                 try:
-                    actualizar_archivo(
-                        foto_id=foto_id,
-                        estado="ERROR"
+
+                    eliminar_foto(
+                        foto_id
+                    )
+
+                    print(
+                        "SQLite: registro eliminado "
+                        "por error."
                     )
 
                 except Exception as error_db:
 
                     print(
-                        f"Error actualizando SQLite: {error_db}"
+                        "No se pudo eliminar el registro "
+                        f"de SQLite: {error_db}"
                     )
 
             # -----------------------------------------
-            # Eliminar SOLO archivo temporal
+            # 15. Eliminar archivo definitivo
             # -----------------------------------------
 
-            if ruta_temporal and os.path.exists(ruta_temporal):
+            if ruta_destino and os.path.exists(
+                ruta_destino
+            ):
 
                 try:
-                    os.remove(ruta_temporal)
+
+                    os.remove(
+                        ruta_destino
+                    )
+
+                    print(
+                        "Archivo definitivo eliminado "
+                        "por error."
+                    )
+
+                except Exception as error_borrado:
+
+                    print(
+                        "No se pudo eliminar el archivo "
+                        f"definitivo: {error_borrado}"
+                    )
+
+            # -----------------------------------------
+            # 16. Eliminar archivo temporal
+            # -----------------------------------------
+
+            if ruta_temporal and os.path.exists(
+                ruta_temporal
+            ):
+
+                try:
+
+                    os.remove(
+                        ruta_temporal
+                    )
 
                     print(
                         "Archivo temporal eliminado."
@@ -882,7 +931,6 @@ def sincronizar_archivos(archivos, ventana=None):
     )
 
     return fotos_sincronizadas
-
 
 
 

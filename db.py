@@ -304,13 +304,15 @@ def actualizar_archivo(
     foto_id,
     nombre_archivo=None,
     ruta_archivo=None,
-    estado=None
+    estado=None,
+    mensaje_error=None
 ):
     """
     Actualiza los datos físicos de una fotografía en la tabla Archivos.
 
     Solo modifica los valores que se proporcionen.
     """
+
     conexion = conectar()
 
     try:
@@ -331,6 +333,10 @@ def actualizar_archivo(
             campos.append("Estado = ?")
             valores.append(estado)
 
+        if mensaje_error is not None:
+            campos.append("MensajeError = ?")
+            valores.append(mensaje_error)
+
         if not campos:
             return
 
@@ -349,6 +355,7 @@ def actualizar_archivo(
 
     finally:
         conexion.close()
+
 
 def buscar_foto_sincronizada_por_hash(hash_sha256):
     conexion = conectar()
@@ -450,6 +457,32 @@ def obtener_foto_por_id(foto_id):
         )
 
         return cursor.fetchone()
+
+    finally:
+        conexion.close()
+
+def eliminar_foto(foto_id):
+    """
+    Elimina una fotografía de Fotos.
+
+    ON DELETE CASCADE elimina también
+    el registro relacionado en Archivos.
+    """
+
+    conexion = conectar()
+
+    try:
+        cursor = conexion.cursor()
+
+        cursor.execute(
+            """
+            DELETE FROM Fotos
+            WHERE FotoID = ?
+            """,
+            (foto_id,)
+        )
+
+        conexion.commit()
 
     finally:
         conexion.close()
